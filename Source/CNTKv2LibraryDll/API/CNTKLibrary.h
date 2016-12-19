@@ -3242,6 +3242,8 @@ namespace CNTK
     typedef TrainingParameterPerSampleSchedule<double> MomentumPerSampleSchedule;
     typedef TrainingParameterPerMinibatchSchedule<double> MomentumPerMinibatchSchedule;
 
+    typedef TrainingParameterSchedule<size_t> MinibatchSizeSchedule;
+
     ///
     /// This class allows to specify momentum as time constant in place of momentum per sample in 
     /// all of Learners factory methods. The specified values are then automatically converted into 
@@ -3534,6 +3536,27 @@ namespace CNTK
         double blockLearningRate = 1.0);
 
     ///
+    /// Describes an input stream: its name, element type, storage, etc.
+    ///
+    struct StreamInformation
+    {
+        std::wstring m_name;           // Unique name of the stream
+        size_t m_id;                   // Unique identifier of the stream
+        StorageFormat m_storageFormat; // Storage format of the stream
+        DataType m_elementType;        // Element type of the stream
+        NDShape m_sampleLayout;        // Layout of the sample for the stream
+    };
+
+    inline bool operator==(const StreamInformation& left, const StreamInformation& right)
+    {
+        return ((left.m_id == right.m_id) &&
+            (left.m_name == right.m_name) &&
+            (left.m_storageFormat == right.m_storageFormat) &&
+            (left.m_elementType == right.m_elementType) &&
+            (left.m_sampleLayout == right.m_sampleLayout));
+    }
+
+    ///
     /// Trainer is the top-level abstraction responsible for the orchestration of the training of a model
     /// using the specified learners and training data either explicitly supplied as Value objects or from
     /// a MinibatchSource object.
@@ -3541,20 +3564,6 @@ namespace CNTK
     class Trainer
     {
     public:
-        ///
-        /// Construct a Trainer to train the specified 'model' with the specified 'trainingLoss' Variable as the training criterion
-        /// and using the specified set of 'parameterLearners' for updating the model's parameters using computed gradients.
-        ///
-        CNTK_API Trainer(const FunctionPtr& model, const FunctionPtr& lossFunction, const std::vector<LearnerPtr>& parameterLearners);
-
-        ///
-        /// Construct a Trainer to train the specified 'model' with the specified 'trainingLoss' as the training criterion,
-        /// the specified 'evaluationFunction' as the criterion for evaluating the trained model's quality, and using the specified set
-        /// of 'parameterLearners' for updating the model's parameters using computed gradients.
-        ///
-        // TODO: Add overload for multiple evaluation criterion
-        CNTK_API Trainer(const FunctionPtr& model, const FunctionPtr& lossFunction, const FunctionPtr& evaluationFunction, const std::vector<LearnerPtr>& parameterLearners);
-
         ///
         /// Optimize model parameters using the specified 'arguments' minibatch of training samples.
         /// Returns false if all parameter learners indicate end of learning (through their Update method's return value).
@@ -3627,6 +3636,12 @@ namespace CNTK
         CNTK_API size_t TotalNumberOfSamplesSeen() const;
 
     private:
+        template <typename T1, typename ...CtorArgTypes>
+        friend std::shared_ptr<T1> MakeSharedObject(CtorArgTypes&& ...ctorArgs);
+
+        Trainer(const FunctionPtr& model, const FunctionPtr& lossFunction, const std::vector<LearnerPtr>& parameterLearners);
+        Trainer(const FunctionPtr& model, const FunctionPtr& lossFunction, const FunctionPtr& evaluationFunction, const std::vector<LearnerPtr>& parameterLearners);
+
         void ExecuteForwardBackward(
             const std::unordered_map<Variable, ValuePtr>& arguments,
             std::unordered_map<Variable, ValuePtr>& outputsToFetch,
@@ -3656,25 +3671,17 @@ namespace CNTK
     };
 
     ///
-    /// Describes an input stream: its name, element type, storage, etc.
+    /// Construct a Trainer to train the specified 'model' with the specified 'trainingLoss' Variable as the training criterion
+    /// and using the specified set of 'parameterLearners' for updating the model's parameters using computed gradients.
     ///
-    struct StreamInformation
-    {
-        std::wstring m_name;           // Unique name of the stream
-        size_t m_id;                   // Unique identifier of the stream
-        StorageFormat m_storageFormat; // Storage format of the stream
-        DataType m_elementType;        // Element type of the stream
-        NDShape m_sampleLayout;        // Layout of the sample for the stream
-    };
+    CNTK_API TrainerPtr CreateTrainer(const FunctionPtr& model, const FunctionPtr& lossFunction, const std::vector<LearnerPtr>& parameterLearners);
 
-    inline bool operator==(const StreamInformation& left, const StreamInformation& right)
-    {
-        return ((left.m_id == right.m_id) &&
-                (left.m_name == right.m_name) &&
-                (left.m_storageFormat == right.m_storageFormat) &&
-                (left.m_elementType == right.m_elementType) &&
-                (left.m_sampleLayout == right.m_sampleLayout));
-    }
+    ///
+    /// Construct a Trainer to train the specified 'model' with the specified 'trainingLoss' as the training criterion,
+    /// the specified 'evaluationFunction' as the criterion for evaluating the trained model's quality, and using the specified set
+    /// of 'parameterLearners' for updating the model's parameters using computed gradients.
+    ///
+    CNTK_API TrainerPtr CreateTrainer(const FunctionPtr& model, const FunctionPtr& lossFunction, const FunctionPtr& evaluationFunction, const std::vector<LearnerPtr>& parameterLearners);
 }
 
 namespace std {
@@ -3957,6 +3964,66 @@ namespace CNTK
     /// Distributed communicator that allows quantized aggregations.
     ///
     CNTK_API QuantizedDistributedCommunicatorPtr QuantizedMPICommunicator(bool zeroThresholdFor1Bit, bool useQuantizationForSelfStripe, size_t numQuantizationBits);
+
+    ///
+    /// Base abstract class that represents a training session.
+    /// Dervied classes can redefine different aspects of training, overriding base virtual methods (GetMinibatchSize, OnNextMinibatch, etc.)
+    ///
+    class TrainingSession
+    {
+    public:
+        CNTK_API TrainingSession(MinibatchSourcePtr trainingSource,
+            TrainerPtr trainer,
+            const std::unordered_map<Variable, StreamInformation>& modelInputToMinibatchSourceStream,
+            size_t checkpointFrequencyInSamples,
+            const std::wstring& checkPointFileName);
+
+        ///
+        /// Runs the session.
+        ///
+        CNTK_API virtual void Run(const DeviceDescriptor& computeDevice);
+
+        ///
+        /// Restores a session from a checkpoint.
+        ///
+        CNTK_API virtual void RestoreFromCheckpoint(const std::wstring& checkpointFileName);
+
+        virtual ~TrainingSession() {}
+
+    protected:
+        //
+        // Called each time before a new minibatch is requested from the minibatch source
+        // during training (from Run method).
+        //
+        virtual size_t GetMinibatchSize() = 0;
+
+        //
+        // Called each time before a new minibatch is given to the trainer.
+        //
+        virtual void OnNextMinibatch() {};
+
+    private:
+        // Disallow copy and move construction and assignment
+        TrainingSession(const TrainingSession&) = delete; TrainingSession& operator=(const TrainingSession&) = delete; TrainingSession& operator=(TrainingSession&&) = delete; TrainingSession(TrainingSession&&) = delete;
+
+        void SaveCheckpoint();
+
+    protected:
+        const size_t m_checkpointFrequencyinSamples;
+        const std::wstring m_checkPointFileName;
+        size_t m_currentCheckpointIndex;
+
+        MinibatchSourcePtr m_trainingSource;
+        TrainerPtr m_trainer;
+        std::unordered_map<Variable, StreamInformation> m_modelInputToMinibatchSourceStream;
+    };
+
+    CNTK_API TrainingSessionPtr CreateBasicTrainingSession(MinibatchSourcePtr trainingSource,
+        TrainerPtr trainer,
+        const std::unordered_map<Variable, StreamInformation>& modelInputToMinibatchSourceStream,
+        const MinibatchSizeSchedule& minibatchSizeSchedule,
+        size_t checkpointFrequencyinSamples,
+        const std::wstring& checkPointFileName);
 }
 
 
