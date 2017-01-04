@@ -3737,8 +3737,8 @@ namespace CNTK
         /// An empty map is returned when the MinibatchSource has no more data to return.
         ///
         virtual const std::unordered_map<StreamInformation, MinibatchData>& GetNextMinibatch(
-            size_t minibatchSizeInSamples,
             size_t minibatchSizeInSequences,
+            size_t minibatchSizeInSamples,
             const DeviceDescriptor& device = DeviceDescriptor::UseDefaultDevice());
 
         ///
@@ -3747,8 +3747,8 @@ namespace CNTK
         /// and depending on the worker rank, only a particular partition is read.
         ///
         virtual const std::unordered_map<StreamInformation, MinibatchData>& GetNextMinibatch(
-            size_t minibatchSizeInSamples,
             size_t minibatchSizeInSequences,
+            size_t minibatchSizeInSamples,
             size_t numberOfWorkers,
             size_t workerRank,
             const DeviceDescriptor& device = DeviceDescriptor::UseDefaultDevice()) = 0;

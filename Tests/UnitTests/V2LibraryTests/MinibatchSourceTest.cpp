@@ -130,53 +130,34 @@ void TestMinibatchSourceWarmStart(size_t minibatchSize, size_t warmStartSamples,
     auto featureStreamName = L"features";
     auto labelsStreamName = L"labels";
 
-    auto groundTruth = TextFormatMinibatchSource(
-        L"SimpleDataTrain_cntk_text.txt",
-        { { featureStreamName, inputDim }, { labelsStreamName, numOutputClasses } },
-        MinibatchSource::FullDataSweep,
-        randomize,
-        chunkSizeInBytes);
-
-    auto featureStreamInfo = groundTruth->StreamInfo(featureStreamName);
-    auto labelStreamInfo = groundTruth->StreamInfo(labelsStreamName);
-
-    // Read all data as it should be without any workers.
-    bool hasData = true;
-    size_t numberOfSamplesInSweep = 0;
-    while (hasData)
-    {
-        auto minibatchData = groundTruth->GetNextMinibatch(minibatchSize);
-        if (minibatchData.empty())
-        {
-            hasData = false;
-            continue;
-        }
-        numberOfSamplesInSweep += minibatchData[featureStreamInfo].m_numSamples;
-    }
+    const size_t numberOfSamplesInSweep = 10000;
 
     // Let's create two workers.
     auto minibatchSource = TextFormatMinibatchSource(
         L"SimpleDataTrain_cntk_text.txt",
         { { featureStreamName, inputDim }, { labelsStreamName, numOutputClasses } },
-        MinibatchSource::FullDataSweep,
+        numberOfSamplesInSweep,
         randomize,
         chunkSizeInBytes);
+
+    auto featureStreamInfo = minibatchSource->StreamInfo(featureStreamName);
+    auto labelStreamInfo = minibatchSource->StreamInfo(labelsStreamName);
 
     auto minibatchSource2 = TextFormatMinibatchSource(
         L"SimpleDataTrain_cntk_text.txt",
         { { featureStreamName, inputDim }, { labelsStreamName, numOutputClasses } },
-        MinibatchSource::FullDataSweep,
+        numberOfSamplesInSweep,
         randomize,
         chunkSizeInBytes);
 
     size_t totalSamples = 0;
-    hasData = true;
+    bool hasData = true;
     while (hasData)
     {
         if (totalSamples < warmStartSamples)
         {
-            auto minibatchData = minibatchSource->GetNextMinibatch(minibatchSize, 0, 1, 0);
-            auto minibatchData2 = minibatchSource2->GetNextMinibatch(minibatchSize, 0, 1, 0);
+            auto minibatchData = minibatchSource->GetNextMinibatch(0, minibatchSize, 1, 0);
+            auto minibatchData2 = minibatchSource2->GetNextMinibatch(0, minibatchSize, 1, 0);
 
             if (minibatchData[featureStreamInfo].m_numSamples != minibatchData2[featureStreamInfo].m_numSamples)
                 ReportFailure("Data does not match, reads are not deterministic!!!");
@@ -188,8 +169,8 @@ void TestMinibatchSourceWarmStart(size_t minibatchSize, size_t warmStartSamples,
         {
             // We are in distributed mode, the sum should be equal to the minibatch size
             // or less at the end of the sweep.
-            auto minibatchData = minibatchSource->GetNextMinibatch(minibatchSize, 0, 2, 0);
-            auto minibatchData2 = minibatchSource2->GetNextMinibatch(minibatchSize, 0, 2, 1);
+            auto minibatchData = minibatchSource->GetNextMinibatch(0, minibatchSize, 2, 0);
+            auto minibatchData2 = minibatchSource2->GetNextMinibatch(0, minibatchSize, 2, 1);
 
             hasData = !minibatchData.empty() || !minibatchData2.empty();
             if (!hasData)
@@ -216,7 +197,10 @@ void TestMinibatchSourceWarmStart(size_t minibatchSize, size_t warmStartSamples,
             }
             else
             {
-                if (accumulative != minibatchSize && totalSamples != numberOfSamplesInSweep)
+                if (accumulative != minibatchSize &&
+                    minibatchData[featureStreamInfo].m_numSamples != minibatchSize / 2 &&
+                    minibatchData2[featureStreamInfo].m_numSamples != minibatchSize / 2 &&
+                    totalSamples != numberOfSamplesInSweep)
                     ReportFailure("TestMinibatchSourceWarmStart failed because data did not match."
                         "Expected minibatch size '%d', acutal '%d'. Total number of sample '%d', sweep '%d'.",
                         minibatchSize,
