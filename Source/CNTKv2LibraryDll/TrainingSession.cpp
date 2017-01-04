@@ -8,14 +8,12 @@
 #include "TrainingSession.h"
 #include "fileutil.h"
 
-namespace
-{
-    const std::wstring g_checkpointIndex = L"CheckpointIndex";
-    const std::wstring g_trainingMinibatchSource = L"TrainingMinibatchSource";
-}
-
 namespace CNTK
 {
+    const std::wstring TrainingSession::s_checkpointIndex = L"CheckpointIndex";
+    const std::wstring TrainingSession::s_trainingMinibatchSource = L"TrainingMinibatchSource";
+
+
     TrainingSessionPtr CreateBasicTrainingSession(MinibatchSourcePtr trainingSource,
         TrainerPtr trainer,
         const std::unordered_map<Variable, StreamInformation>& modelInputToMinibatchSourceStream,
@@ -76,8 +74,8 @@ namespace CNTK
     {
         std::unordered_map<Variable, ValuePtr> minibatch;
         bool shouldTrain = true;
-        size_t numberOfWorkers = 0;
-        size_t workerRank = 1;
+        size_t numberOfWorkers = 1;
+        size_t workerRank = 0;
         while (shouldTrain)
         {
             size_t mbSize = GetMinibatchSize();
@@ -115,15 +113,15 @@ namespace CNTK
     void TrainingSession::RestoreFromCheckpoint(const std::wstring& checkpointFileName)
     {
         Dictionary externalState = m_trainer->RestoreFromCheckpoint(checkpointFileName);
-        m_currentCheckpointIndex = externalState[g_checkpointIndex].Value<size_t>();
-        m_trainingSource->RestoreFromCheckpoint(externalState[g_trainingMinibatchSource].Value<Dictionary>());
+        m_currentCheckpointIndex = externalState[s_checkpointIndex].Value<size_t>();
+        m_trainingSource->RestoreFromCheckpoint(externalState[s_trainingMinibatchSource].Value<Dictionary>());
     }
 
     void TrainingSession::SaveCheckpoint()
     {
         Dictionary externalState;
-        externalState[g_checkpointIndex] = m_currentCheckpointIndex;
-        externalState[g_trainingMinibatchSource] = m_trainingSource->GetCheckpointState();
+        externalState[s_checkpointIndex] = m_currentCheckpointIndex;
+        externalState[s_trainingMinibatchSource] = m_trainingSource->GetCheckpointState();
 
         std::wstring tempFileName = m_checkPointFileName + L".tmp";
         m_trainer->SaveCheckpoint(tempFileName, externalState);

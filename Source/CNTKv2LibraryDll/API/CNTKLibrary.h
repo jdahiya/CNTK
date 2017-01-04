@@ -4022,6 +4022,9 @@ namespace CNTK
 
         void SaveCheckpoint();
 
+        const static std::wstring s_checkpointIndex;
+        const static std::wstring s_trainingMinibatchSource;
+
     protected:
         const size_t m_checkpointFrequencyinSamples;
         const std::wstring m_checkPointFileName;
