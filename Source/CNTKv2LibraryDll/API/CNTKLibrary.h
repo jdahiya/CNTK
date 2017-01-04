@@ -4030,6 +4030,9 @@ namespace CNTK
         MinibatchSourcePtr m_trainingSource;
         TrainerPtr m_trainer;
         std::unordered_map<Variable, StreamInformation> m_modelInputToMinibatchSourceStream;
+        size_t m_parallelAfterSamples;
+        size_t m_workerRank;
+        size_t m_numberOfWorkers;
     };
 
     CNTK_API TrainingSessionPtr CreateBasicTrainingSession(MinibatchSourcePtr trainingSource,

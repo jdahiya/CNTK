@@ -42,18 +42,53 @@ namespace CNTK
         m_modelInputToMinibatchSourceStream(modelInputToMinibatchSourceStream),
         m_checkpointFrequencyinSamples(checkpointFrequencyInSamples),
         m_checkPointFileName(checkPointFileName),
-        m_currentCheckpointIndex(0)
+        m_currentCheckpointIndex(0),
+        m_parallelAfterSamples(0),
+        m_workerRank(0),
+        m_numberOfWorkers(1)
     {
+        if (!trainingSource)
+            InvalidArgument("Minibatch source is not allowed to be null.");
+        if (!trainer)
+            InvalidArgument("Trainer is not allowed to be null.");
+        if(modelInputToMinibatchSourceStream.empty())
+            InvalidArgument("Input mapping is not allowed to be empty.");
+        if (m_checkPointFileName.empty())
+            InvalidArgument("Checkpoint file name is not allowed to be empty.");
+
+        // Let's calculate the warm up period the distributed learners may need.
+        // We will take the maximum warm up period required.
+        auto learners = trainer->ParameterLearners();
+        m_parallelAfterSamples = 0;
+        for (const auto& l: learners)
+        {
+            auto distributed = std::dynamic_pointer_cast<DistributedLearner>(l);
+            if (distributed)
+            {
+                m_parallelAfterSamples = std::max(m_parallelAfterSamples, distributed->ParallelAfter());
+                m_workerRank = distributed->GetCommunicator()->CurrentWorker().m_globalRank;
+                m_numberOfWorkers = distributed->GetCommunicator()->Workers().size();
+            }
+        }
     }
 
     void TrainingSession::Run(const DeviceDescriptor& computeDevice)
     {
         std::unordered_map<Variable, ValuePtr> minibatch;
         bool shouldTrain = true;
+        size_t numberOfWorkers = 0;
+        size_t workerRank = 1;
         while (shouldTrain)
         {
             size_t mbSize = GetMinibatchSize();
-            auto minibatchData = m_trainingSource->GetNextMinibatch(mbSize, computeDevice);
+
+            if (m_parallelAfterSamples >= m_trainer->TotalNumberOfSamplesSeen())
+            {
+                numberOfWorkers = m_numberOfWorkers;
+                workerRank = m_workerRank;
+            }
+
+            auto minibatchData = m_trainingSource->GetNextMinibatch(mbSize, 0 /*numberOfSequences*/, numberOfWorkers, workerRank, computeDevice);
 
             minibatch.clear();
             if (!minibatchData.empty())
