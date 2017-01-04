@@ -3486,6 +3486,16 @@ namespace CNTK
         }
 
         //
+        // Returns the total number of samples needed for warmup.
+        // After reaching this number of samples the learner switches to the distributed mode.
+        // Warm up is useful for 
+        //
+        virtual size_t ParallelAfter()
+        {
+            return 0;
+        }
+
+        //
         // Method to update the parameters associated with this learner. By returning false, this method indicates that
         // learning has stopped for all of the parameters associated with this learner
         //
@@ -3726,14 +3736,22 @@ namespace CNTK
         /// In case the size is specified in terms of both #sequences and #samples, the smaller of the 2 is taken.
         /// An empty map is returned when the MinibatchSource has no more data to return.
         ///
-        virtual const std::unordered_map<StreamInformation, MinibatchData>& GetNextMinibatch(size_t minibatchSizeInSamples,
+        virtual const std::unordered_map<StreamInformation, MinibatchData>& GetNextMinibatch(
+            size_t minibatchSizeInSamples,
             size_t minibatchSizeInSequences,
-            const DeviceDescriptor& device = DeviceDescriptor::UseDefaultDevice()) = 0;
+            const DeviceDescriptor& device = DeviceDescriptor::UseDefaultDevice());
 
         ///
-        /// Returns whether the MinibatchSource is running in distributed manner
+        /// Same as above but allows to specify partition of data in a distributed environment.
+        /// Depending on the number of workers the data is splitted in different partitions,
+        /// and depending on the worker rank, only a particular partition is read.
         ///
-        virtual bool IsDistributed() const = 0;
+        virtual const std::unordered_map<StreamInformation, MinibatchData>& GetNextMinibatch(
+            size_t minibatchSizeInSamples,
+            size_t minibatchSizeInSequences,
+            size_t numberOfWorkers,
+            size_t workerRank,
+            const DeviceDescriptor& device = DeviceDescriptor::UseDefaultDevice()) = 0;
 
         ///
         /// Destruct this MinibatchSource.
@@ -3800,7 +3818,7 @@ namespace CNTK
     /// 
     /// Instantiate the CNTK built-in test format minibatch source
     ///
-    inline MinibatchSourcePtr TextFormatMinibatchSource(const std::wstring& dataFilePath, const std::vector<StreamConfiguration>& streamConfigs, size_t epochSize = MinibatchSource::InfinitelyRepeat, bool randomize = true, size_t distributedAfterSampleCount = MinibatchSource::InfiniteSamples)
+    inline MinibatchSourcePtr TextFormatMinibatchSource(const std::wstring& dataFilePath, const std::vector<StreamConfiguration>& streamConfigs, size_t epochSize = MinibatchSource::InfinitelyRepeat, bool randomize = true)
     {
         ::CNTK::Dictionary minibatchSourceConfiguration;
         minibatchSourceConfiguration[L"epochSize"] = epochSize;
@@ -3831,10 +3849,6 @@ namespace CNTK
 
         deserializerConfiguration[L"input"] = inputStreamsConfig;
         minibatchSourceConfiguration[L"deserializers"] = std::vector<::CNTK::DictionaryValue>({ deserializerConfiguration });
-
-        //TODO: change all these dictionary names to string constants
-        minibatchSourceConfiguration[L"distributedAfterSampleCount"] = distributedAfterSampleCount;
-
         return CreateCompositeMinibatchSource(minibatchSourceConfiguration);
     }
 

@@ -42,8 +42,7 @@ namespace
         auto minibatchSource = TextFormatMinibatchSource(g_inputFile,
             { { g_featureStreamName, classifier.inputDim }, { g_labelsStreamName, classifier.ouputDim } },
             totalNumberOfSamples,
-            true,
-            name == L"blockmomentum" ? MinibatchSource::InfiniteSamples: 0);
+            true);
 
         auto featureStreamInfo = minibatchSource->StreamInfo(g_featureStreamName);
         auto labelStreamInfo = minibatchSource->StreamInfo(g_labelsStreamName);
