@@ -63,7 +63,7 @@ namespace CNTK
             auto distributed = std::dynamic_pointer_cast<DistributedLearner>(l);
             if (distributed)
             {
-                m_parallelAfterSamples = std::max(m_parallelAfterSamples, distributed->ParallelAfter());
+                m_parallelAfterSamples = std::max(m_parallelAfterSamples, distributed->ParallelizationAfter());
                 m_workerRank = distributed->GetCommunicator()->CurrentWorker().m_globalRank;
                 m_numberOfWorkers = distributed->GetCommunicator()->Workers().size();
             }
@@ -86,7 +86,7 @@ namespace CNTK
                 workerRank = m_workerRank;
             }
 
-            auto minibatchData = m_trainingSource->GetNextMinibatch(mbSize, 0 /*numberOfSequences*/, numberOfWorkers, workerRank, computeDevice);
+            auto minibatchData = m_trainingSource->GetNextMinibatch(0 /*numberOfSequences*/, mbSize, numberOfWorkers, workerRank, computeDevice);
 
             minibatch.clear();
             if (!minibatchData.empty())

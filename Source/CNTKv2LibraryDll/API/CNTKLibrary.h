@@ -3490,7 +3490,7 @@ namespace CNTK
         // After reaching this number of samples the learner switches to the distributed mode.
         // Warm up is useful for 
         //
-        virtual size_t ParallelAfter()
+        virtual size_t ParallelizationAfter()
         {
             return 0;
         }
@@ -4022,8 +4022,8 @@ namespace CNTK
 
         void SaveCheckpoint();
 
-        const static std::wstring s_checkpointIndex;
-        const static std::wstring s_trainingMinibatchSource;
+        static const std::wstring s_checkpointIndex;
+        static const std::wstring s_trainingMinibatchSource;
 
     protected:
         const size_t m_checkpointFrequencyinSamples;

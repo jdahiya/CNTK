@@ -19,7 +19,7 @@ namespace CNTK
 
         void RestoreFromCheckpoint(const Dictionary& checkpoint) override;
 
-        size_t ParallelAfter() override
+        size_t ParallelizationAfter() override
         {
             return m_distributeAfterSamples;
         }
